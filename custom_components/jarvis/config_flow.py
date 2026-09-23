@@ -7,8 +7,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_validation as cv
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     TextSelector,
@@ -26,7 +25,7 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
         {
             vol.Required(
                 CONF_URL, default=defaults.get(CONF_URL, DEFAULT_URL)
-            ): vol.All(str, cv.url),
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
             vol.Required(
                 CONF_API_KEY, default=defaults.get(CONF_API_KEY, "")
             ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
@@ -55,7 +54,7 @@ class JarvisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle initial setup."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -74,7 +73,7 @@ class JarvisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Update the backend URL or API key."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
@@ -92,4 +91,3 @@ class JarvisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=_schema(user_input or dict(entry.data)),
             errors=errors,
         )
-
