@@ -1,0 +1,32 @@
+{
+  "title": "Jarvis",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Jarvis verbinden",
+        "description": "Verbinde Home Assistant mit dem Jarvis Memory- und Chat-Service.",
+        "data": {
+          "url": "Backend-URL",
+          "api_key": "API-Schlüssel"
+        }
+      },
+      "reconfigure": {
+        "title": "Jarvis neu konfigurieren",
+        "description": "Aktualisiere die Verbindung zum Jarvis-Backend.",
+        "data": {
+          "url": "Backend-URL",
+          "api_key": "API-Schlüssel"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Jarvis-Backend fehlgeschlagen.",
+      "invalid_auth": "Der API-Schlüssel wurde abgelehnt."
+    },
+    "abort": {
+      "already_configured": "Jarvis ist bereits eingerichtet.",
+      "reconfigure_successful": "Jarvis wurde aktualisiert."
+    }
+  }
+}
+
