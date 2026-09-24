@@ -72,6 +72,7 @@ def _message_from_content(content: conversation.Content) -> dict[str, Any] | Non
     if isinstance(content, conversation.ToolResultContent):
         return {
             "role": "tool",
+            "tool_name": content.tool_name,
             "content": json_dumps(content.tool_result),
         }
     return None
