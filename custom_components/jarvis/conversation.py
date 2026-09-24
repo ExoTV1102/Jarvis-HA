@@ -24,8 +24,17 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 MAX_TOOL_ITERATIONS = 10
 TOOL_COMPLETION_PROMPT = """Home Assistant tool results are authoritative.
-After receiving a tool result, answer the user based on that result. Never repeat
-the same tool call with the same arguments within one request."""
+Resolve device references only from the dynamically supplied Home Assistant
+tools, entity names, aliases, areas, and tool results. If a tool result identifies
+exactly one plausible canonical target, retry with that target without asking the
+user. Ask a clarification question only when multiple plausible targets remain.
+Treat a short yes/no reply as the answer to the latest assistant clarification and
+continue that pending request. After receiving a successful tool result, answer
+the user based on that result. Never repeat the same tool call with the same
+arguments within one request."""
+FINAL_RESPONSE_PROMPT = """Give the user a concise final answer now. Base it on
+the Home Assistant tool results already present in the conversation. Do not call
+another tool and do not return an empty response."""
 
 
 def _format_tool(
@@ -174,16 +183,25 @@ class JarvisConversationEntity(
                         "Stopped duplicate Home Assistant tool calls: %s",
                         ", ".join(duplicate_tools),
                     )
-                    final_turn = await self._client.async_chat_turn(
-                        user_input.text,
-                        system_prompt,
-                        messages,
-                        [],
-                    )
+                    try:
+                        final_turn = await self._client.async_chat_turn(
+                            user_input.text,
+                            f"{system_prompt}\n\n{FINAL_RESPONSE_PROMPT}",
+                            messages,
+                            [],
+                        )
+                        final_answer = final_turn.answer
+                    except JarvisApiError:
+                        _LOGGER.warning(
+                            "Jarvis returned no final answer after a completed "
+                            "Home Assistant tool call",
+                            exc_info=True,
+                        )
+                        final_answer = ""
                     chat_log.async_add_assistant_content_without_tools(
                         AssistantContent(
                             agent_id=user_input.agent_id,
-                            content=final_turn.answer
+                            content=final_answer
                             or "Der Home-Assistant-Befehl wurde bereits verarbeitet.",
                         )
                     )
