@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
+import json
+import logging
 from typing import Any, Literal
 
 from voluptuous_openapi import convert
@@ -21,7 +22,10 @@ from .api import JarvisApiClient, JarvisApiError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-MAX_TOOL_ITERATIONS = 6
+MAX_TOOL_ITERATIONS = 10
+TOOL_COMPLETION_PROMPT = """Home Assistant tool results are authoritative.
+After receiving a tool result, answer the user based on that result. Never repeat
+the same tool call with the same arguments within one request."""
 
 
 def _format_tool(
@@ -123,9 +127,16 @@ class JarvisConversationEntity(
                 _format_tool(tool, chat_log.llm_api.custom_serializer)
                 for tool in chat_log.llm_api.tools
             ]
+            seen_tool_calls: set[str] = set()
+            requested_tools: list[str] = []
 
             for _iteration in range(MAX_TOOL_ITERATIONS):
-                system_prompt = getattr(chat_log.content[0], "content", "")
+                system_prompt = "\n\n".join(
+                    (
+                        getattr(chat_log.content[0], "content", ""),
+                        TOOL_COMPLETION_PROMPT,
+                    )
+                )
                 messages = [
                     message
                     for content in chat_log.content[1:]
@@ -144,6 +155,38 @@ class JarvisConversationEntity(
                     )
                     for tool_call in turn.tool_calls
                 ]
+                signatures = [
+                    json.dumps(
+                        [tool_input.tool_name, tool_input.tool_args],
+                        sort_keys=True,
+                        default=str,
+                    )
+                    for tool_input in tool_inputs
+                ]
+                if duplicate_tools := [
+                    tool_input.tool_name
+                    for tool_input, signature in zip(
+                        tool_inputs, signatures, strict=True
+                    )
+                    if signature in seen_tool_calls
+                ]:
+                    _LOGGER.warning(
+                        "Stopped duplicate Home Assistant tool calls: %s",
+                        ", ".join(duplicate_tools),
+                    )
+                    chat_log.async_add_assistant_content_without_tools(
+                        AssistantContent(
+                            agent_id=user_input.agent_id,
+                            content=(
+                                "Der Home-Assistant-Befehl wurde bereits verarbeitet."
+                            ),
+                        )
+                    )
+                    break
+                seen_tool_calls.update(signatures)
+                requested_tools.extend(
+                    tool_input.tool_name for tool_input in tool_inputs
+                )
                 assistant_content = AssistantContent(
                     agent_id=user_input.agent_id,
                     content=turn.answer or None,
@@ -156,7 +199,10 @@ class JarvisConversationEntity(
                 if not tool_inputs:
                     break
             else:
-                raise JarvisApiError("Too many Home Assistant tool iterations")
+                raise JarvisApiError(
+                    "Too many Home Assistant tool iterations: "
+                    + ", ".join(requested_tools)
+                )
         except conversation.ConverseError as err:
             return err.as_conversation_result()
         except JarvisApiError:
