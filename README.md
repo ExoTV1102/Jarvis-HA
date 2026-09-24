@@ -40,6 +40,9 @@ to the selected native Home Assistant conversation agent. The native agent keeps
 its streaming, conversation history, and built-in Assist tool handling. Jarvis no
 longer runs a second model or a custom tool loop. If the memory service is
 temporarily unavailable, the native agent continues without personal context.
+For device status and control requests, Jarvis also requires a real Home Assistant
+tool call and tells the agent not to report success without a successful tool
+result.
 
 Only entities exposed to Assist are available. The memory backend receives no
 Home Assistant access token and does not execute Home Assistant tools itself.
