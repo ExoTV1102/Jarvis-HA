@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any, Literal
 
-import probatio
+from voluptuous_openapi import convert
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import AssistantContent
@@ -23,15 +24,13 @@ _LOGGER = logging.getLogger(__name__)
 MAX_TOOL_ITERATIONS = 6
 
 
-def _format_tool(tool: llm.Tool, custom_serializer: Any) -> dict[str, Any]:
+def _format_tool(
+    tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None
+) -> dict[str, Any]:
     """Convert a Home Assistant LLM tool to Ollama's tool format."""
     function: dict[str, Any] = {
         "name": tool.name,
-        "parameters": probatio.to_openapi(
-            tool.parameters,
-            custom_serializer=custom_serializer,
-            openapi_version="3.1.0",
-        ),
+        "parameters": convert(tool.parameters, custom_serializer=custom_serializer),
     }
     if tool.description:
         function["description"] = tool.description
@@ -60,12 +59,7 @@ def _message_from_content(content: conversation.Content) -> dict[str, Any] | Non
     if isinstance(content, conversation.ToolResultContent):
         return {
             "role": "tool",
-            "content": json_dumps(
-                {
-                    "data": content.result.data,
-                    "error": content.result.error,
-                }
-            ),
+            "content": json_dumps(content.tool_result),
         }
     return None
 
