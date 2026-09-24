@@ -3,11 +3,11 @@
   "name": "Jarvis",
   "codeowners": ["@ExoTV1102"],
   "config_flow": true,
-  "dependencies": ["conversation", "llm"],
+  "dependencies": ["conversation"],
   "documentation": "https://github.com/ExoTV1102/Jarvis-HA",
   "integration_type": "service",
   "iot_class": "local_polling",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.2.0"
+  "version": "0.2.1"
 }
