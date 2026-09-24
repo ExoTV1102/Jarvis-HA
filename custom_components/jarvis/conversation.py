@@ -3,19 +3,71 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
+
+import probatio
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import AssistantContent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import llm
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.json import json_dumps
 
 from .api import JarvisApiClient, JarvisApiError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+MAX_TOOL_ITERATIONS = 6
+
+
+def _format_tool(tool: llm.Tool, custom_serializer: Any) -> dict[str, Any]:
+    """Convert a Home Assistant LLM tool to Ollama's tool format."""
+    function: dict[str, Any] = {
+        "name": tool.name,
+        "parameters": probatio.to_openapi(
+            tool.parameters,
+            custom_serializer=custom_serializer,
+            openapi_version="3.1.0",
+        ),
+    }
+    if tool.description:
+        function["description"] = tool.description
+    return {"type": "function", "function": function}
+
+
+def _message_from_content(content: conversation.Content) -> dict[str, Any] | None:
+    """Convert Home Assistant chat-log content to an Ollama message."""
+    if isinstance(content, conversation.UserContent):
+        return {"role": "user", "content": content.content}
+    if isinstance(content, conversation.AssistantContent):
+        message: dict[str, Any] = {
+            "role": "assistant",
+            "content": content.content or "",
+        }
+        if content.tool_calls:
+            message["tool_calls"] = [
+                {
+                    "name": tool_call.tool_name,
+                    "arguments": tool_call.tool_args,
+                }
+                for tool_call in content.tool_calls
+                if not tool_call.external
+            ]
+        return message
+    if isinstance(content, conversation.ToolResultContent):
+        return {
+            "role": "tool",
+            "content": json_dumps(
+                {
+                    "data": content.result.data,
+                    "error": content.result.error,
+                }
+            ),
+        }
+    return None
 
 
 async def async_setup_entry(
@@ -37,6 +89,7 @@ class JarvisConversationEntity(
 
     _attr_has_entity_name = True
     _attr_name = "Jarvis"
+    _attr_supported_features = conversation.ConversationEntityFeature.CONTROL
 
     def __init__(self, entry: ConfigEntry, client: JarvisApiClient) -> None:
         self._entry = entry
@@ -63,25 +116,64 @@ class JarvisConversationEntity(
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
-        """Send the message and recent conversation history to Jarvis."""
-        history: list[dict[str, str]] = []
-        for item in chat_log.content[:-1]:
-            role = getattr(item, "role", None)
-            content = getattr(item, "content", None)
-            if role in ("user", "assistant") and isinstance(content, str) and content:
-                history.append({"role": role, "content": content})
-
+        """Answer with memory and Home Assistant's exposure-aware tools."""
         try:
-            answer = await self._client.async_chat(user_input.text, history)
+            await chat_log.async_provide_llm_data(
+                user_input.as_llm_context(DOMAIN),
+                llm.LLM_API_ASSIST,
+                None,
+                user_input.extra_system_prompt,
+            )
+            assert chat_log.llm_api is not None
+            tools = [
+                _format_tool(tool, chat_log.llm_api.custom_serializer)
+                for tool in chat_log.llm_api.tools
+            ]
+
+            for _iteration in range(MAX_TOOL_ITERATIONS):
+                system_prompt = getattr(chat_log.content[0], "content", "")
+                messages = [
+                    message
+                    for content in chat_log.content[1:]
+                    if (message := _message_from_content(content)) is not None
+                ]
+                turn = await self._client.async_chat_turn(
+                    user_input.text,
+                    system_prompt,
+                    messages,
+                    tools,
+                )
+                tool_inputs = [
+                    llm.ToolInput(
+                        tool_name=tool_call.name,
+                        tool_args=tool_call.arguments,
+                    )
+                    for tool_call in turn.tool_calls
+                ]
+                assistant_content = AssistantContent(
+                    agent_id=user_input.agent_id,
+                    content=turn.answer or None,
+                    tool_calls=tool_inputs or None,
+                )
+                async for _tool_result in chat_log.async_add_assistant_content(
+                    assistant_content
+                ):
+                    pass
+                if not tool_inputs:
+                    break
+            else:
+                raise JarvisApiError("Too many Home Assistant tool iterations")
+        except conversation.ConverseError as err:
+            return err.as_conversation_result()
         except JarvisApiError:
             _LOGGER.exception("Jarvis failed to answer")
-            answer = (
-                "Jarvis ist momentan nicht erreichbar. "
-                "Bitte prüfe den Memory-Service und Ollama."
+            chat_log.async_add_assistant_content_without_tools(
+                AssistantContent(
+                    agent_id=user_input.agent_id,
+                    content=(
+                        "Jarvis ist momentan nicht erreichbar. "
+                        "Bitte prüfe den Memory-Service und Ollama."
+                    ),
+                )
             )
-
-        chat_log.async_add_assistant_content_without_tools(
-            AssistantContent(agent_id=user_input.agent_id, content=answer)
-        )
         return conversation.async_get_result_from_chat_log(user_input, chat_log)
-
