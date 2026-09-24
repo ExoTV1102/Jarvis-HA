@@ -4,24 +4,27 @@
     "step": {
       "user": {
         "title": "Jarvis verbinden",
-        "description": "Verbinde Home Assistant mit dem Jarvis Memory- und Chat-Service.",
+        "description": "Verbinde den Jarvis-Memory-Service mit einem nativen Home-Assistant-Konversationsagenten.",
         "data": {
           "url": "Backend-URL",
-          "api_key": "API-Schlüssel"
+          "api_key": "API-Schlüssel",
+          "agent_id": "Nativer Konversationsagent"
         }
       },
       "reconfigure": {
         "title": "Jarvis neu konfigurieren",
-        "description": "Aktualisiere die Verbindung zum Jarvis-Backend.",
+        "description": "Aktualisiere die Memory-Verbindung und den nativen Konversationsagenten.",
         "data": {
           "url": "Backend-URL",
-          "api_key": "API-Schlüssel"
+          "api_key": "API-Schlüssel",
+          "agent_id": "Nativer Konversationsagent"
         }
       }
     },
     "error": {
       "cannot_connect": "Verbindung zum Jarvis-Backend fehlgeschlagen.",
-      "invalid_auth": "Der API-Schlüssel wurde abgelehnt."
+      "invalid_auth": "Der API-Schlüssel wurde abgelehnt.",
+      "invalid_agent": "Bitte wähle einen anderen verfügbaren Konversationsagenten aus."
     },
     "abort": {
       "already_configured": "Jarvis ist bereits eingerichtet.",
@@ -29,4 +32,3 @@
     }
   }
 }
-

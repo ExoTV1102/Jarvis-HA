@@ -4,24 +4,27 @@
     "step": {
       "user": {
         "title": "Connect Jarvis",
-        "description": "Connect Home Assistant to the Jarvis memory and chat service.",
+        "description": "Connect the Jarvis memory service to a native Home Assistant conversation agent.",
         "data": {
           "url": "Backend URL",
-          "api_key": "API key"
+          "api_key": "API key",
+          "agent_id": "Native conversation agent"
         }
       },
       "reconfigure": {
         "title": "Reconfigure Jarvis",
-        "description": "Update the connection to the Jarvis backend.",
+        "description": "Update the memory connection and native conversation agent.",
         "data": {
           "url": "Backend URL",
-          "api_key": "API key"
+          "api_key": "API key",
+          "agent_id": "Native conversation agent"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to the Jarvis backend.",
-      "invalid_auth": "The API key was rejected."
+      "invalid_auth": "The API key was rejected.",
+      "invalid_agent": "Select a different available conversation agent."
     },
     "abort": {
       "already_configured": "Jarvis is already configured.",
