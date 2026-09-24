@@ -116,6 +116,21 @@ class JarvisConversationEntity(
     ) -> conversation.ConversationResult:
         """Answer with memory and Home Assistant's exposure-aware tools."""
         try:
+            if intent_response := await conversation.async_handle_intents(
+                self.hass, user_input, chat_log
+            ):
+                speech = intent_response.speech.get("plain", {}).get("speech", "")
+                chat_log.async_add_assistant_content_without_tools(
+                    AssistantContent(
+                        agent_id=conversation.HOME_ASSISTANT_AGENT,
+                        content=speech,
+                    )
+                )
+                return conversation.ConversationResult(
+                    response=intent_response,
+                    conversation_id=chat_log.conversation_id,
+                )
+
             await chat_log.async_provide_llm_data(
                 user_input.as_llm_context(DOMAIN),
                 llm.LLM_API_ASSIST,
@@ -174,12 +189,17 @@ class JarvisConversationEntity(
                         "Stopped duplicate Home Assistant tool calls: %s",
                         ", ".join(duplicate_tools),
                     )
+                    final_turn = await self._client.async_chat_turn(
+                        user_input.text,
+                        system_prompt,
+                        messages,
+                        [],
+                    )
                     chat_log.async_add_assistant_content_without_tools(
                         AssistantContent(
                             agent_id=user_input.agent_id,
-                            content=(
-                                "Der Home-Assistant-Befehl wurde bereits verarbeitet."
-                            ),
+                            content=final_turn.answer
+                            or "Der Home-Assistant-Befehl wurde bereits verarbeitet.",
                         )
                     )
                     break
